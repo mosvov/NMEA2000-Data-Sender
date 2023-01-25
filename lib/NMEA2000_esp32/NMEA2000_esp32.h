@@ -57,23 +57,15 @@ private:
   static bool CanInUse;
 
 protected:
-  struct tCANFrame
-  {
-    uint32_t id; // can identifier
-    uint8_t len; // length of data
-    uint8_t buf[8];
-  };
-
-protected:
   CAN_speed_t speed;
   gpio_num_t TxPin;
   gpio_num_t RxPin;
-  QueueHandle_t RxQueue;
-  QueueHandle_t TxQueue;
+  // QueueHandle_t RxQueue;
+  // QueueHandle_t TxQueue;
 
 protected:
-  void CAN_read_frame();                 // Read frame to queue within interrupt
-  void CAN_send_frame(tCANFrame &frame); // Send frame
+  // void CAN_read_frame(); // Read frame to queue within interrupt
+  // void CAN_send_frame(tCANFrame &frame); // Send frame
   void CAN_init();
 
 protected:
@@ -85,7 +77,7 @@ protected:
 public:
   tNMEA2000_esp32(gpio_num_t _TxPin = ESP32_CAN_TX_PIN, gpio_num_t _RxPin = ESP32_CAN_RX_PIN);
 
-  void InterruptHandler();
+  // void InterruptHandler();
 };
 
 #endif

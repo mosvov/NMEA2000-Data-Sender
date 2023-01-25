@@ -95,26 +95,13 @@ extern "C"
 	MODULE_CAN->MBX_CTRL.FCTRL.TX_RX.STD.ID[1] = ((x) << 5);
 
 /** \brief Set extended message ID */
-#define _CAN_SET_EXT_ID(x) \
-	//MODULE_CAN->MBX_CTRL.FCTRL.TX_RX.EXT.ID[0] = ((x) >> 21); \
-	//MODULE_CAN->MBX_CTRL.FCTRL.TX_RX.EXT.ID[1] = ((x) >> 13); \
-	//MODULE_CAN->MBX_CTRL.FCTRL.TX_RX.EXT.ID[2] = ((x) >> 5);  \
-	//MODULE_CAN->MBX_CTRL.FCTRL.TX_RX.EXT.ID[3] = ((x) << 3);
+#define _CAN_SET_EXT_ID(x)                                    \
+	MODULE_CAN->MBX_CTRL.FCTRL.TX_RX.EXT.ID[0] = ((x) >> 21); \
+	MODULE_CAN->MBX_CTRL.FCTRL.TX_RX.EXT.ID[1] = ((x) >> 13); \
+	MODULE_CAN->MBX_CTRL.FCTRL.TX_RX.EXT.ID[2] = ((x) >> 5);  \
+	MODULE_CAN->MBX_CTRL.FCTRL.TX_RX.EXT.ID[3] = ((x) << 3);
 
-	/** \brief Interrupt status register */
-	typedef enum
-	{
-		__CAN_IRQ_RX = BIT(0),			 /**< \brief RX Interrupt */
-		__CAN_IRQ_TX = BIT(1),			 /**< \brief TX Interrupt */
-		__CAN_IRQ_ERR = BIT(2),			 /**< \brief Error Interrupt */
-		__CAN_IRQ_DATA_OVERRUN = BIT(3), /**< \brief Date Overrun Interrupt */
-		__CAN_IRQ_WAKEUP = BIT(4),		 /**< \brief Wakeup Interrupt */
-		__CAN_IRQ_ERR_PASSIVE = BIT(5),	 /**< \brief Passive Error Interrupt */
-		__CAN_IRQ_ARB_LOST = BIT(6),	 /**< \brief Arbitration lost interrupt */
-		__CAN_IRQ_BUS_ERR = BIT(7),		 /**< \brief Bus error Interrupt */
-	} __CAN_IRQ_t;
-
-		/**
+	/**
 	 * CAN controller (SJA1000).
 	 */
 	typedef struct
