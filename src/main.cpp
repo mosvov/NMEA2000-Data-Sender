@@ -1,7 +1,7 @@
 #include <Arduino.h>
 
-#define ESP32_CAN_TX_PIN GPIO_NUM_19 // Set CAN TX port to 5
-#define ESP32_CAN_RX_PIN GPIO_NUM_18 // Set CAN RX port to 4
+#define ESP32_CAN_TX_PIN GPIO_NUM_18
+#define ESP32_CAN_RX_PIN GPIO_NUM_19
 
 #include <Preferences.h>
 #include <NMEA2000_CAN.h> // This will automatically choose right CAN library and create suitable NMEA2000 object
@@ -252,6 +252,27 @@ double ReadVoltage(byte pin)
   return (-0.000000000000016 * pow(reading, 4) + 0.000000000118171 * pow(reading, 3) - 0.000000301211691 * pow(reading, 2) + 0.001109019271794 * reading + 0.034143524634089) * 1000;
 } // Added an improved polynomial, use either, comment out as required
 
+// Define schedulers for messages. Define schedulers here disabled. Schedulers will be enabled
+// on OnN2kOpen so they will be synchronized with system.
+// We use own scheduler for each message so that each can have different offset and period.
+// Setup periods according PGN definition (see comments on IsDefaultSingleFrameMessage and
+// IsDefaultFastPacketMessage) and message first start offsets. Use a bit different offset for
+// each message so they will not be sent at same time.
+tN2kSyncScheduler DCBatStatusScheduler(false, 1500, 500);
+tN2kSyncScheduler DCStatusScheduler(false, 1500, 510);
+tN2kSyncScheduler BatConfScheduler(false, 5000, 520); // Non periodic
+
+// *****************************************************************************
+// Call back for NMEA2000 open. This will be called, when library starts bus communication.
+// See NMEA2000.SetOnOpen(OnN2kOpen); on setup()
+void OnN2kOpen()
+{
+  // Start schedulers now.
+  DCBatStatusScheduler.UpdateNextTime();
+  DCStatusScheduler.UpdateNextTime();
+  BatConfScheduler.UpdateNextTime();
+}
+
 const tNMEA2000::tProductInformation ProductInformation PROGMEM = {
     2100,                     // N2kVersion
     100,                      // Manufacturer's product code
@@ -324,9 +345,14 @@ void setup()
   NMEA2000.SetForwardType(tNMEA2000::fwdt_Text); // Show in clear text. Leave uncommented for default Actisense format.
 
   NMEA2000.SetMode(tNMEA2000::N2km_ListenAndNode, NodeAddress);
+  // NMEA2000.SetDebugMode(tNMEA2000::dm_ClearText); // Uncomment this, so you can test code without CAN bus chips on Arduino Mega
+
   NMEA2000.ExtendTransmitMessages(TransmitMessages);
 
-  // NMEA2000.Open();
+  // Define OnOpen call back. This will be called, when CAN is open and system starts address claiming.
+  NMEA2000.SetOnOpen(OnN2kOpen);
+
+  NMEA2000.Open();
 
   // Create task for core 0, loop() runs on core 1
   xTaskCreatePinnedToCore(
@@ -355,9 +381,9 @@ void loop()
     FuelLevel = 100;
 
   // SendN2kTankLevel(FuelLevel, 200); // Adjust max tank capacity.  Is it 200 ???
-  //  SendN2kExhaustTemp(ExhaustTemp);
-  //  SendN2kEngineRPM(EngineRPM);
-  //  SendN2kBattery(BatteryVolt);
+  //   SendN2kExhaustTemp(ExhaustTemp);
+  //   SendN2kEngineRPM(EngineRPM);
+  //   SendN2kBattery(BatteryVolt);
 
   // NMEA2000.ParseMessages();
   int SourceAddress = NMEA2000.GetN2kSource();
