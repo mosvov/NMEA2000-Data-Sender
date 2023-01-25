@@ -163,56 +163,55 @@ void tNMEA2000_esp32::CAN_init()
   // DPORT_CLEAR_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG, DPORT_CAN_RST);
 
   twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_18, GPIO_NUM_19, TWAI_MODE_NORMAL);
-  g_config.tx_queue_len = 20;
+  // g_config.tx_queue_len = 20;
 
   twai_timing_config_t t_config = TWAI_TIMING_CONFIG_250KBITS();
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
   // Install TWAI driver
   ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
-  ESP_LOGI(EXAMPLE_TAG, "Driver installed");
 
   // configure RX pin
-  gpio_set_direction(RxPin, GPIO_MODE_INPUT);
-  gpio_matrix_in(RxPin, TWAI_RX_IDX, 0);
-  gpio_pad_select_gpio(RxPin);
+  // gpio_set_direction(RxPin, GPIO_MODE_INPUT);
+  // gpio_matrix_in(RxPin, TWAI_RX_IDX, 0);
+  // gpio_pad_select_gpio(RxPin);
 
   // set to PELICAN mode
-  MODULE_CAN->clock_divider_reg.cd = 0x1;
+  // MODULE_CAN->clock_divider_reg.cd = 0x1;
 
   // synchronization jump width is the same for all baud rates
-  MODULE_CAN->bus_timing_0_reg.sjw = 0x1;
+  // MODULE_CAN->bus_timing_0_reg.sjw = 0x1;
 
   // TSEG2 is the same for all baud rates
-  MODULE_CAN->bus_timing_1_reg.tseg2 = 0x1;
+  // MODULE_CAN->bus_timing_1_reg.tseg2 = 0x1;
 
   // select time quantum and set TSEG1
   switch (speed)
   {
   case CAN_SPEED_1000KBPS:
-    MODULE_CAN->bus_timing_1_reg.tseg1 = 0x4;
+    // MODULE_CAN->bus_timing_1_reg.tseg1 = 0x4;
     __tq = 0.125;
     break;
 
   case CAN_SPEED_800KBPS:
-    MODULE_CAN->bus_timing_1_reg.tseg1 = 0x6;
+    // MODULE_CAN->bus_timing_1_reg.tseg1 = 0x6;
     __tq = 0.125;
     break;
   default:
-    MODULE_CAN->bus_timing_1_reg.tseg1 = 0xc;
+    // MODULE_CAN->bus_timing_1_reg.tseg1 = 0xc;
     __tq = ((float)1000 / speed) / 16;
   }
 
   // set baud rate prescaler
-  MODULE_CAN->bus_timing_0_reg.brp = (uint8_t)round((((APB_CLK_FREQ * __tq) / 2) - 1) / 1000000) - 1;
+  // MODULE_CAN->bus_timing_0_reg.brp = (uint8_t)round((((APB_CLK_FREQ * __tq) / 2) - 1) / 1000000) - 1;
 
   /* Set sampling
    * 1 -> triple; the bus is sampled three times; recommended for low/medium speed buses     (class A and B) where filtering spikes on the bus line is beneficial
    * 0 -> single; the bus is sampled once; recommended for high speed buses (SAE class C)*/
-  MODULE_CAN->bus_timing_1_reg.sam = 0x1;
+  // MODULE_CAN->bus_timing_1_reg.sam = 0x1;
 
   // enable all interrupts
-  MODULE_CAN->interrupt_enable_reg.val = 0xef; // bit 0x10 contains Baud Rate Prescaler Divider (BRP_DIV) bit
+  // MODULE_CAN->interrupt_enable_reg.val = 0xef; // bit 0x10 contains Baud Rate Prescaler Divider (BRP_DIV) bit
 
   // no acceptance filtering, as we want to fetch all messages
   // MODULE_CAN->MBX_CTRL.acceptance_filter.acr[0] = 0;
@@ -228,12 +227,12 @@ void tNMEA2000_esp32::CAN_init()
   // MODULE_CAN->OCR.B.OCMODE = __CAN_OC_NOM; //Output control not supported
 
   // clear error counters
-  (void)MODULE_CAN->tx_error_counter_reg.txerr;
-  (void)MODULE_CAN->rx_error_counter_reg;
-  (void)MODULE_CAN->error_code_capture_reg;
+  //(void)MODULE_CAN->tx_error_counter_reg.txerr;
+  //(void)MODULE_CAN->rx_error_counter_reg;
+  //(void)MODULE_CAN->error_code_capture_reg;
 
   // clear interrupt flags
-  (void)MODULE_CAN->interrupt_reg.val;
+  //(void)MODULE_CAN->interrupt_reg.val;
 
   // install CAN ISR
   // esp_intr_alloc(ETS_TWAI_INTR_SOURCE, 0, ESP32Can1Interrupt, NULL, NULL);
@@ -242,14 +241,14 @@ void tNMEA2000_esp32::CAN_init()
   //  We do late configure, since some initialization above caused CAN Tx flash
   //  shortly causing one error frame on startup. By setting CAN pin here
   //  it works right.
-  gpio_set_direction(TxPin, GPIO_MODE_OUTPUT);
-  gpio_matrix_out(TxPin, TWAI_TX_IDX, 0, 0);
-  gpio_pad_select_gpio(TxPin);
+  // gpio_set_direction(TxPin, GPIO_MODE_OUTPUT);
+  // gpio_matrix_out(TxPin, TWAI_TX_IDX, 0, 0);
+  // gpio_pad_select_gpio(TxPin);
 
   // Showtime. Release Reset Mode.
-  MODULE_CAN->mode_reg.rm = 0;
+  // MODULE_CAN->mode_reg.rm = 0;
 
   // Start TWAI driver
   ESP_ERROR_CHECK(twai_start());
-  ESP_LOGI(EXAMPLE_TAG, "Driver started");
+  Serial.println("TWAI Driver started");
 }
