@@ -7,6 +7,9 @@
 #include <DallasTemperature.h>
 #include <memory>
 
+#include <BleSerial.h>
+BleSerial ble;
+
 #define REDPIN 3
 #define GREENPIN 4
 #define BLUEPIN 5
@@ -32,7 +35,18 @@ void setColor(int redValue = 0, int greenValue = 0, int blueValue = 0, int coldW
   analogWrite(WARM_WHITE, 0);
 }
 
-#define ENABLE_DEBUG_LOG 1 // Debug log
+#define ENABLE_DEBUG_LOG true // flag to turn on/off debugging
+// println all messages to serial console and BLE
+// to see all messages via phone app Serial Bluetooth terminal
+#define debug_log(...)             \
+  do                               \
+  {                                \
+    if (ENABLE_DEBUG_LOG)          \
+    {                              \
+      Serial.println(__VA_ARGS__); \
+      ble.println(__VA_ARGS__);    \
+    }                              \
+  } while (0)
 
 #define ADC_Calibration_Value1 250.0 // For resistor measure 5 Volt and 180 Ohm equals 100% plus 1K resistor.
 #define ADC_Calibration_Value2 34.3  // The real value depends on the true resistor values for the ADC input (100K / 27 K).
@@ -74,13 +88,6 @@ TaskHandle_t Task1;
 const int baudrate = 38400;
 const int rs_config = SERIAL_8N1;
 
-void debug_log(char *str)
-{
-#if ENABLE_DEBUG_LOG == 1
-  Serial.println(str);
-#endif
-}
-
 // RPM Event Interrupt
 // Enters on falling edge
 //=======================================
@@ -110,7 +117,7 @@ void GetTemperature(void *parameter)
     setColor(0, 40, 0);
     vTaskDelay(100);
 
-    Serial.printf("ExhaustTemp=%d\n", tmp);
+    debug_log("ExhaustTemp=" + String(tmp));
   }
 }
 
@@ -145,6 +152,9 @@ void setup()
 
   // Init USB serial port
   Serial.begin(115200);
+
+  // Start the BLE Serial
+  ble.begin("ESP_MONITOR");
 
   //
   setupNMEA();
@@ -181,6 +191,7 @@ void setup()
 
 void loop()
 {
+
   unsigned int size;
 
   BatteryVolt = ((BatteryVolt * 15) + (ReadVoltage(ADCpin2) * ADC_Calibration_Value2 / 4096)) / 16; // This implements a low pass filter to eliminate spike for ADC readings
@@ -202,8 +213,8 @@ void loop()
   updateNMEAdress();
 
   // Dummy to empty input buffer to avoid board to stuck with e.g. NMEA Reader
-  if (Serial.available())
+  if (ble.available())
   {
-    Serial.read();
+    Serial.write(ble.read());
   }
 }
