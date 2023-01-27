@@ -251,4 +251,7 @@ void tNMEA2000_esp32::CAN_init()
   // Start TWAI driver
   ESP_ERROR_CHECK(twai_start());
   Serial.println("TWAI Driver started");
+
+  // TWAI_ALERT_ABOVE_ERR_WARN | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_OFF
+  ESP_ERROR_CHECK(twai_reconfigure_alerts(TWAI_ALERT_ALL, NULL));
 }

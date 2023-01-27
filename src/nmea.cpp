@@ -2,6 +2,7 @@
 #include <Preferences.h>
 #include <NMEA2000_CAN.h> // This will automatically choose right CAN library and create suitable NMEA2000 object
 #include <N2kMessages.h>
+#include "driver/twai.h"
 
 Preferences preferences; // Nonvolatile storage on ESP32 - To store LastDeviceAddress
 int NodeAddress;         // To store last Node Address
@@ -43,14 +44,14 @@ void OnN2kOpen()
 }
 
 const tNMEA2000::tProductInformation ProductInformation PROGMEM = {
-    2100,                     // N2kVersion
-    100,                      // Manufacturer's product code
-    "Simple battery monitor", // Manufacturer's Model ID
-    "1.2.0.16 (2022-10-01)",  // Manufacturer's Software version code
-    "1.2.0.0 (2022-10-01)",   // Manufacturer's Model version
-    "00000001",               // Manufacturer's Model serial code
-    0,                        // SertificationLevel
-    1                         // LoadEquivalency
+    2100,                               // N2kVersion
+    100,                                // Manufacturer's product code
+    "ESP32 C3 engine and temp monitor", // Manufacturer's Model ID
+    "1.2.0.16 (2022-10-01)",            // Manufacturer's Software version code
+    "1.2.0.0 (2022-10-01)",             // Manufacturer's Model version
+    "00000001",                         // Manufacturer's Model serial code
+    0,                                  // SertificationLevel
+    1                                   // LoadEquivalency
 };
 
 const char ManufacturerInformation[] PROGMEM = "John Doe, john.doe@unknown.com";
@@ -206,4 +207,18 @@ void updateNMEAdress()
         preferences.end();
         Serial.printf("Address Change: New Address=%d\n", SourceAddress);
     }
+}
+
+void loopNMEA()
+{
+    // NMEA2000.ParseMessages();
+
+    uint32_t alerts;
+    twai_read_alerts(&alerts, portMAX_DELAY);
+    if (alerts)
+    {
+        Serial.println(alerts);
+    }
+
+    updateNMEAdress();
 }

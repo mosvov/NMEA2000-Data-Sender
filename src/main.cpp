@@ -7,6 +7,8 @@
 #include <DallasTemperature.h>
 #include <memory>
 
+#include "driver/temp_sensor.h" //legacy esp32 temp sensor driver. https://github.com/espressif/esp-idf/blob/master/components/driver/test_apps/legacy_rtc_temp_driver/main/test_rtc_temp_driver.c
+
 #include <BleSerial.h>
 BleSerial ble;
 
@@ -33,6 +35,14 @@ void setColor(int redValue = 0, int greenValue = 0, int blueValue = 0, int coldW
 
   analogWrite(COLD_WHITE, 0);
   analogWrite(WARM_WHITE, 0);
+}
+
+void initTempSensor()
+{
+  temp_sensor_config_t temp_sensor = TSENS_CONFIG_DEFAULT();
+  temp_sensor.dac_offset = TSENS_DAC_L2; // TSENS_DAC_L2 is default   L4(-40℃ ~ 20℃), L2(-10℃ ~ 80℃) L1(20℃ ~ 100℃) L0(50℃ ~ 125℃)
+  temp_sensor_set_config(temp_sensor);
+  temp_sensor_start();
 }
 
 #define ENABLE_DEBUG_LOG true // flag to turn on/off debugging
@@ -117,7 +127,12 @@ void GetTemperature(void *parameter)
     setColor(0, 40, 0);
     vTaskDelay(100);
 
-    debug_log("ExhaustTemp=" + String(tmp));
+    // debug_log("ExhaustTemp=" + String(ExhaustTemp));
+
+    // Get internal temp
+    float result = 0;
+    ESP_ERROR_CHECK(temp_sensor_read_celsius(&result));
+    debug_log("InternalTemp=C" + String(result));
   }
 }
 
@@ -155,6 +170,9 @@ void setup()
 
   // Start the BLE Serial
   ble.begin("ESP_MONITOR");
+
+  // Init internal temp sensor
+  initTempSensor();
 
   //
   setupNMEA();
@@ -208,9 +226,7 @@ void loop()
   // SendN2kEngineRPM(EngineRPM);
   // SendN2kBattery(BatteryVolt);
 
-  // NMEA2000.ParseMessages();
-
-  updateNMEAdress();
+   loopNMEA();
 
   // Dummy to empty input buffer to avoid board to stuck with e.g. NMEA Reader
   if (ble.available())
