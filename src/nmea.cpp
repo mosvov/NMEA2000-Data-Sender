@@ -209,16 +209,28 @@ void updateNMEAdress()
     }
 }
 
-void loopNMEA()
+void checkNmeaErrors(void *parameter)
 {
-    // NMEA2000.ParseMessages();
-
     uint32_t alerts;
-    twai_read_alerts(&alerts, portMAX_DELAY);
+    ESP_ERROR_CHECK(twai_read_alerts(&alerts, portMAX_DELAY));
     if (alerts)
     {
-        Serial.println(alerts);
+        Serial.printf("twai_read_alerts - %s \n", alerts);
     }
+    else
+    {
+        Serial.printf("twai_read_alerts - %s \n", alerts);
+    }
+}
 
-    updateNMEAdress();
+void loopNMEA(void *parameter)
+{
+    while (true)
+    {
+        Serial.printf("loopNMEA\n");
+
+        NMEA2000.ParseMessages();
+
+        updateNMEAdress();
+    }
 }

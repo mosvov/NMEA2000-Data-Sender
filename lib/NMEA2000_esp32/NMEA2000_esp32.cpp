@@ -45,11 +45,13 @@ tNMEA2000_esp32 *pNMEA2000_esp32 = 0;
 
 //*****************************************************************************
 tNMEA2000_esp32::tNMEA2000_esp32(gpio_num_t _TxPin, gpio_num_t _RxPin) : tNMEA2000(), IsOpen(false),
-                                                                         speed(CAN_SPEED_250KBPS), TxPin(_TxPin), RxPin(_RxPin)
+                                                                         speed(CAN_SPEED_250KBPS), TxPin(_TxPin), RxPin(_RxPin),
+                                                                         RxQueue(NULL), TxQueue(NULL)
 {
 }
 
 //*****************************************************************************
+
 bool tNMEA2000_esp32::CANSendFrame(unsigned long id, unsigned char len, const unsigned char *buf, bool /*wait_sent*/)
 {
 
@@ -58,15 +60,16 @@ bool tNMEA2000_esp32::CANSendFrame(unsigned long id, unsigned char len, const un
   message.data_length_code = len > 8 ? 8 : len;
   memcpy(message.data, buf, len);
 
+  esp_err_t result = twai_transmit(&message, pdMS_TO_TICKS(1000));
   // Queue message for transmission
-  if (twai_transmit(&message, pdMS_TO_TICKS(1000)) == ESP_OK)
+  if (result == ESP_OK)
   {
     printf("Message queued for transmission\n");
     return true;
   }
   else
   {
-    printf("Failed to queue message for transmission\n");
+    Serial.printf("Failed to queue message for transmission - %s \n", esp_err_to_name(result));
     return false;
   }
 }
@@ -74,14 +77,14 @@ bool tNMEA2000_esp32::CANSendFrame(unsigned long id, unsigned char len, const un
 //*****************************************************************************
 void tNMEA2000_esp32::InitCANFrameBuffers()
 {
-  // if (MaxCANReceiveFrames < 10)
-  //   MaxCANReceiveFrames = 50; // ESP32 has plenty of RAM
-  // if (MaxCANSendFrames < 10)
-  //   MaxCANSendFrames = 40;
-  // uint16_t CANGlobalBufSize = MaxCANSendFrames - 4;
-  // MaxCANSendFrames = 4; // we do not need much libary internal buffer since driver has them.
-  // RxQueue = xQueueCreate(MaxCANReceiveFrames, sizeof(tCANFrame));
-  // TxQueue = xQueueCreate(CANGlobalBufSize, sizeof(tCANFrame));
+  if (MaxCANReceiveFrames < 10)
+    MaxCANReceiveFrames = 50; // ESP32 has plenty of RAM
+  if (MaxCANSendFrames < 10)
+    MaxCANSendFrames = 40;
+  uint16_t CANGlobalBufSize = MaxCANSendFrames - 4;
+  MaxCANSendFrames = 4; // we do not need much libary internal buffer since driver has them.
+  RxQueue = xQueueCreate(MaxCANReceiveFrames, sizeof(tCANFrame));
+  TxQueue = xQueueCreate(CANGlobalBufSize, sizeof(tCANFrame));
 
   tNMEA2000::InitCANFrameBuffers(); // call main initialization
 }
@@ -109,40 +112,55 @@ bool tNMEA2000_esp32::CANGetFrame(unsigned long &id, unsigned char &len, unsigne
 {
   bool HasFrame = false;
 
-  // Wait for message to be received
+  twai_status_info_t twai_status;
   twai_message_t message;
-  if (twai_receive(&message, pdMS_TO_TICKS(10000)) == ESP_OK)
-  {
-    HasFrame = true;
-    printf("Message received\n");
-  }
-  else
-  {
-    printf("Failed to receive message\n");
-    return false;
-  }
 
-  // Process received message
-  if (message.extd)
+  // Check for received messages
+  twai_get_status_info(&twai_status);
+
+  Serial.printf("TWAI Status: %i\n", twai_status.state);
+  Serial.printf("TWAI Messages to Receive: %i\n", twai_status.msgs_to_rx);
+  Serial.printf("TWAI Messages to Send: %i\n", twai_status.msgs_to_tx);
+  Serial.printf("TWAI Messages Receive Errors: %i\n", twai_status.rx_error_counter);
+  Serial.printf("TWAI Messages Receive Missed: %i\n", twai_status.rx_missed_count);
+  Serial.printf("TWAI Messages Bus errors: %i\n", twai_status.bus_error_count);
+  Serial.printf("TWAI Messages ARB Lost: %i\n", twai_status.arb_lost_count);
+
+  if (twai_status.msgs_to_rx >= 1)
   {
-    printf("Message is in Extended Format\n");
-  }
-  else
-  {
-    printf("Message is in Standard Format\n");
-  }
-  printf("ID is %d\n", message.identifier);
-  if (!(message.rtr))
-  {
-    for (int i = 0; i < message.data_length_code; i++)
+    // Wait for message to be received
+    twai_message_t message;
+    if (twai_receive(&message, portMAX_DELAY) == ESP_OK)
     {
-      printf("Data byte %d = %d\n", i, message.data[i]);
+      printf("Message received\n");
+      // Process received message
+      if (message.extd)
+      {
+        printf("Message is in Extended Format\n");
+      }
+      else
+      {
+        printf("Message is in Standard Format\n");
+      }
+      printf("ID is %d\n", message.identifier);
+      if (!(message.rtr))
+      {
+        for (int i = 0; i < message.data_length_code; i++)
+        {
+          printf("Data byte %d = %d\n", i, message.data[i]);
+        }
+      }
+
+      id = message.identifier;
+      len = message.data_length_code;
+      memcpy(buf, message.data, message.data_length_code);
+    }
+    else
+    {
+      printf("Failed to receive message\n");
+      return false;
     }
   }
-
-  id = message.identifier;
-  len = message.data_length_code;
-  memcpy(buf, message.data, message.data_length_code);
 
   return HasFrame;
 }
@@ -163,7 +181,7 @@ void tNMEA2000_esp32::CAN_init()
   // DPORT_CLEAR_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG, DPORT_CAN_RST);
 
   twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_18, GPIO_NUM_19, TWAI_MODE_NORMAL);
-  // g_config.tx_queue_len = 20;
+  g_config.tx_queue_len = 20;
 
   twai_timing_config_t t_config = TWAI_TIMING_CONFIG_250KBITS();
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
