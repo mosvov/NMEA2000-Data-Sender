@@ -219,7 +219,7 @@ void checkNmeaErrors(void *parameter)
     }
     else
     {
-        Serial.printf("twai_read_alerts - %s \n", alerts);
+        Serial.printf("twai_read_alerts \n");
     }
 }
 

@@ -196,7 +196,7 @@ void setup()
   sensors.begin();
 
   // Grab a count of devices on the wire
-  numberOfDevices = sensors.getDeviceCount();
+  int numberOfDevices = sensors.getDeviceCount();
 
   // locate devices on the bus
   Serial.print("Locating devices...");

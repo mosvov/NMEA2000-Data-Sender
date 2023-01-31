@@ -27,6 +27,8 @@ libraries, I implemented his code directly to the NMEA2000_esp32 to avoid extra
 can.h library, which may cause even naming problem.
 */
 
+#define ESP32_CAN_TX_PIN GPIO_NUM_19 // Set CAN TX port
+#define ESP32_CAN_RX_PIN GPIO_NUM_18 // Set CAN RX port
 #include "driver/periph_ctrl.h"
 // include "soc/dport_reg.h"
 #include "driver/gpio.h"
@@ -179,8 +181,7 @@ void tNMEA2000_esp32::CAN_init()
   // enable module
   // DPORT_SET_PERI_REG_MASK(DPORT_PERIP_CLK_EN_REG, DPORT_CAN_CLK_EN);
   // DPORT_CLEAR_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG, DPORT_CAN_RST);
-
-  twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_18, GPIO_NUM_19, TWAI_MODE_NORMAL);
+  twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(ESP32_CAN_TX_PIN, ESP32_CAN_RX_PIN, TWAI_MODE_NORMAL);
   g_config.tx_queue_len = 20;
 
   twai_timing_config_t t_config = TWAI_TIMING_CONFIG_250KBITS();
