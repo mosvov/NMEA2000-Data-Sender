@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <Preferences.h>
+
 #include <NMEA2000_CAN.h> // This will automatically choose right CAN library and create suitable NMEA2000 object
+#include <NMEA2000_esp32.h>
 #include <N2kMessages.h>
 #include "driver/twai.h"
 
@@ -58,6 +60,13 @@ const char ManufacturerInformation[] PROGMEM = "John Doe, john.doe@unknown.com";
 const char InstallationDescription1[] PROGMEM = "Just for sample";
 const char InstallationDescription2[] PROGMEM = "No real information send to bus";
 
+// NMEA 2000 message handler
+void HandleNMEA2000Msg(const tN2kMsg &N2kMsg)
+{
+
+    Serial.printf("HandleNMEA2000Msg N2kMsg.PGN= %lu\n", N2kMsg.PGN);
+}
+
 void setupNMEA()
 {
     uint8_t chipid[6];
@@ -69,9 +78,8 @@ void setupNMEA()
         id += (chipid[i] << (7 * i));
 
     preferences.begin("nvs", false);                         // Open nonvolatile storage (nvs)
-    NodeAddress = preferences.getInt("LastNodeAddress", 25); // Read stored last NodeAddress, default 25
+    NodeAddress = preferences.getInt("LastNodeAddress", 32); // Read stored last NodeAddress, default 32
     preferences.end();
-    Serial.printf("NodeAddress=%d\n", NodeAddress);
 
     // Reserve enough buffer for sending all messages. This does not work on small memory devices like Uno or Mega
     NMEA2000.SetN2kCANMsgBufSize(8);
@@ -98,6 +106,7 @@ void setupNMEA()
     // NMEA2000.SetDebugMode(tNMEA2000::dm_ClearText); // Uncomment this, so you can test code without CAN bus chips on Arduino Mega
 
     NMEA2000.ExtendTransmitMessages(TransmitMessages);
+    NMEA2000.SetMsgHandler(HandleNMEA2000Msg);
 
     // Define OnOpen call back. This will be called, when CAN is open and system starts address claiming.
     NMEA2000.SetOnOpen(OnN2kOpen);
@@ -199,8 +208,9 @@ void SendN2kEngineRPM(double RPM)
 void updateNMEAdress()
 {
     int SourceAddress = NMEA2000.GetN2kSource();
+    // Save potentially changed Source Address to NVS memory
     if (SourceAddress != NodeAddress)
-    {                                // Save potentially changed Source Address to NVS memory
+    {
         NodeAddress = SourceAddress; // Set new Node Address (to save only once)
         preferences.begin("nvs", false);
         preferences.putInt("LastNodeAddress", SourceAddress);
@@ -211,26 +221,129 @@ void updateNMEAdress()
 
 void checkNmeaErrors(void *parameter)
 {
-    uint32_t alerts;
-    ESP_ERROR_CHECK(twai_read_alerts(&alerts, portMAX_DELAY));
-    if (alerts)
+    while (true)
     {
-        Serial.printf("twai_read_alerts - %s \n", alerts);
-    }
-    else
-    {
-        Serial.printf("twai_read_alerts \n");
+        uint32_t alerts;
+        ESP_ERROR_CHECK(twai_read_alerts(&alerts, portMAX_DELAY));
+        if (alerts)
+        {
+
+            if (alerts & TWAI_ALERT_RX_DATA || alerts & TWAI_ALERT_TX_IDLE || alerts & TWAI_ALERT_TX_SUCCESS)
+            {
+                continue;
+            }
+
+            twai_status_info_t twai_status;
+            twai_get_status_info(&twai_status);
+
+            Serial.printf("TWAI ALERT: --->>>>\n");
+            Serial.printf("TWAI Status: %i\n", twai_status.state);
+            Serial.printf("TWAI Messages to Receive: %li\n", twai_status.msgs_to_rx);
+            Serial.printf("TWAI Messages to Send: %li\n", twai_status.msgs_to_tx);
+            Serial.printf("TWAI Messages Receive Errors: %li\n", twai_status.rx_error_counter);
+            Serial.printf("TWAI Messages Receive Missed: %li\n", twai_status.rx_missed_count);
+            Serial.printf("TWAI Messages Bus errors: %li\n", twai_status.bus_error_count);
+            Serial.printf("TWAI Messages ARB Lost: %li\n", twai_status.arb_lost_count);
+
+            if (alerts & TWAI_ALERT_BUS_OFF)
+            {
+                Serial.println("ERROR: Bus Off state");
+                // Prepare to initiate bus recovery, reconfigure alerts to detect bus recovery completion
+                twai_reconfigure_alerts(TWAI_ALERT_BUS_RECOVERED, NULL);
+                twai_initiate_recovery(); // Needs 128 occurrences of bus free signal
+                Serial.println("ERROR: Initiate bus recovery");
+            }
+
+            if (alerts & TWAI_ALERT_BUS_RECOVERED)
+            {
+                // Bus recovery was successful,
+                Serial.println("ERROR: Bus Recovered");
+                // Start TWAI driver
+                ESP_ERROR_CHECK(twai_start());
+                Serial.println("TWAI Driver started");
+                ESP_ERROR_CHECK(twai_reconfigure_alerts(TWAI_ALERT_ALL, NULL));
+            }
+
+            if (alerts & TWAI_ALERT_TX_IDLE)
+            {
+                Serial.println("Alert: No more messages to transmit");
+            }
+
+            if (alerts & TWAI_ALERT_TX_SUCCESS)
+            {
+                Serial.println("Alert: The previous transmission was successful");
+            }
+
+            if (alerts & TWAI_ALERT_RX_DATA)
+            {
+                Serial.println("Alert: A frame has been received and added to the RX queue");
+            }
+
+            if (alerts & TWAI_ALERT_BELOW_ERR_WARN)
+            {
+                Serial.println("Alert: Both error counters have dropped below error warning limit");
+            }
+
+            if (alerts & TWAI_ALERT_ERR_ACTIVE)
+            {
+                Serial.println("Alert: TWAI controller has become error active");
+            }
+
+            if (alerts & TWAI_ALERT_ARB_LOST)
+            {
+                Serial.println("Alert: The previous transmission lost arbitration");
+            }
+
+            if (alerts & TWAI_ALERT_ABOVE_ERR_WARN)
+            {
+                Serial.println("Alert: One of the error counters have exceeded the error warning limit");
+            }
+
+            if (alerts & TWAI_ALERT_BUS_ERROR)
+            {
+                Serial.println("Alert: A (Bit, Stuff, CRC, Form, ACK) error has occurred on the bus");
+            }
+
+            if (alerts & TWAI_ALERT_ERR_PASS)
+            {
+                Serial.println("Alert: TWAI controller has become error passive");
+            }
+
+            if (alerts & TWAI_ALERT_TX_FAILED)
+            {
+                Serial.println("Alert: The previous transmission has failed (for single shot transmission)");
+            }
+
+            if (alerts & TWAI_ALERT_RX_QUEUE_FULL)
+            {
+                Serial.println("Alert: The RX queue is full causing a frame to be lost");
+            }
+
+            if (alerts & TWAI_ALERT_RX_FIFO_OVERRUN)
+            {
+                Serial.println("Alert: An RX FIFO overrun has occurred");
+            }
+
+            if (alerts & TWAI_ALERT_TX_RETRIED)
+            {
+                Serial.println("Alert: An message transmission was cancelled and retried due to an errata workaround");
+            }
+
+            if (alerts & TWAI_ALERT_PERIPH_RESET)
+            {
+                Serial.println("Alert: The TWAI controller was reset");
+            }
+        }
     }
 }
 
-void loopNMEA(void *parameter)
+void reciveNmeaMessage(void *parameter)
 {
-    while (true)
-    {
-        Serial.printf("loopNMEA\n");
+    ESP32_CAN_read_frame();
+}
 
-        NMEA2000.ParseMessages();
-
-        updateNMEAdress();
-    }
+void loopNMEA()
+{
+    updateNMEAdress();
+    NMEA2000.ParseMessages();
 }

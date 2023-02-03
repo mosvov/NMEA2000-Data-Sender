@@ -1,11 +1,12 @@
 #include <Arduino.h>
 
-#define ESP32_CAN_TX_PIN GPIO_NUM_19 // Set CAN TX port
-#define ESP32_CAN_RX_PIN GPIO_NUM_18 // Set CAN RX port
-#define Eingine_RPM_Pin GPIO_NUM_3   // Engine RPM is measured as interrupt on GPIO 3
-#define ONE_WIRE_BUS GPIO_NUM_10     // Data wire for teperature (Dallas DS18B20)
-const int ADCpin2 = GPIO_NUM_1;      // Voltage measure
-const int ADCpin1 = GPIO_NUM_2;      // Tank fluid level measure
+#define ESP32_CAN_TX_PIN GPIO_NUM_1 // Set CAN TX port
+#define ESP32_CAN_RX_PIN GPIO_NUM_2 // Set CAN RX port
+
+#define Eingine_RPM_Pin GPIO_NUM_3 // Engine RPM is measured as interrupt on GPIO 3
+#define ONE_WIRE_BUS GPIO_NUM_9    // Data wire for teperature (Dallas DS18B20)
+const int ADCpin2 = GPIO_NUM_3;    // Voltage measure
+const int ADCpin1 = GPIO_NUM_4;    // Tank fluid level measure
 
 #include <nmea.h>
 #include <DallasTemperature.h>
@@ -86,15 +87,6 @@ float InternalTemp = 0;
 float EngineRPM = 0;
 float BatteryVolt = 0;
 
-// Task handlers
-TaskHandle_t Task1;
-TaskHandle_t Task2;
-TaskHandle_t Task3;
-
-// Serial port 2 config (GPIO 16)
-// const int baudrate = 38400;
-// const int rs_config = SERIAL_8N1;
-
 // RPM Event Interrupt
 // Enters on falling edge
 //=======================================
@@ -116,24 +108,24 @@ void GetTemperature(void *parameter)
   {
     // setColor(40, 40, 0);
     sensors.requestTemperatures(); // Send the command to get temperatures
-    vTaskDelay(100);
+    vTaskDelay(500);
 
     tmp = sensors.getTempCByIndex(0);
     if (tmp != -127)
       ExhaustTemp = tmp;
 
     // setColor(0, 40, 0);
-    vTaskDelay(100);
+    vTaskDelay(500);
 
     // Get internal temp
     ESP_ERROR_CHECK(temp_sensor_read_celsius(&InternalTemp));
 
-    // debug_log("FuelLevel=" + String(FuelLevel));
-    // debug_log("EngineRPM=" + String(EngineRPM));
-    // debug_log("BatteryVolt=V" + String(BatteryVolt));
-    // debug_log("InternalTemp=C" + String(InternalTemp));
-    // debug_log("ExhaustTemp=C" + String(ExhaustTemp));
-    // debug_log("__________________________________");
+    debug_log("FuelLevel=" + String(FuelLevel));
+    debug_log("EngineRPM=" + String(EngineRPM));
+    debug_log("BatteryVolt=V" + String(BatteryVolt));
+    debug_log("InternalTemp=C" + String(InternalTemp));
+    debug_log("ExhaustTemp=C" + String(ExhaustTemp));
+    debug_log("__________________________________");
   }
 }
 
@@ -210,8 +202,8 @@ void setup()
       "Task1",        /* Name of the task */
       4096,           /* Stack size in words */
       NULL,           /* Task input parameter */
-      0,              /* Priority of the task */
-      &Task1,         /* Task handle. */
+      8,              /* Priority of the task */
+      NULL,           /* Task handle. */
       0);             /* Core where the task should run */
 
   xTaskCreatePinnedToCore(
@@ -219,18 +211,18 @@ void setup()
       "Task2",         /* Name of the task */
       4096,            /* Stack size in words */
       NULL,            /* Task input parameter */
-      0,               /* Priority of the task */
-      &Task2,          /* Task handle. */
+      9,               /* Priority of the task */
+      NULL,            /* Task handle. */
       0);              /* Core where the task should run */
 
   xTaskCreatePinnedToCore(
-      loopNMEA, /* Function to implement the task */
-      "Task3",  /* Name of the task */
-      4096,     /* Stack size in words */
-      NULL,     /* Task input parameter */
-      0,        /* Priority of the task */
-      &Task3,   /* Task handle. */
-      0);       /* Core where the task should run */
+      reciveNmeaMessage, /* Function to implement the task */
+      "Task3",           /* Name of the task */
+      4096,              /* Stack size in words */
+      NULL,              /* Task input parameter */
+      10,                /* Priority of the task */
+      NULL,              /* Task handle. */
+      0);                /* Core where the task should run */
 
   delay(200);
 }
@@ -245,10 +237,12 @@ void loop()
 
   // if (FuelLevel > 100) FuelLevel = 100;
 
-  SendN2kTankLevel(FuelLevel, 200); // Adjust max tank capacity.  Is it 200 ???
-  SendN2kExhaustTemp(ExhaustTemp);
-  SendN2kEngineRPM(EngineRPM);
-  SendN2kBattery(BatteryVolt);
+  // SendN2kTankLevel(FuelLevel, 200); // Adjust max tank capacity.  Is it 200 ???
+  // SendN2kExhaustTemp(ExhaustTemp);
+  // SendN2kEngineRPM(EngineRPM);
+  // SendN2kBattery(BatteryVolt);
+
+  loopNMEA();
 
   // Dummy to empty input buffer to avoid board to stuck with e.g. NMEA Reader
   if (ble.available())
