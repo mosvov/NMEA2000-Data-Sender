@@ -10,50 +10,30 @@ Preferences preferences; // Nonvolatile storage on ESP32 - To store LastDeviceAd
 int NodeAddress;         // To store last Node Address
 // Set the information for other bus devices, which messages we support
 const unsigned long TransmitMessages[] PROGMEM = {127505L, // Fluid Level
-                                                  130311L, // Temperature  (or alternatively 130312L or 130316L)
+                                                  130311L,
+                                                  130316L, // Temperature  (or alternatively 130312L or 130316L)
                                                   127488L, // Engine Rapid / RPM
                                                   127508L, // Battery Status
                                                   0};
 
 // Send time offsets
 #define TempSendOffset 0
-#define TankSendOffset 40
-#define RPM_SendOffset 80
-#define BatterySendOffset 100
+#define Temp2SendOffset 40
+#define TankSendOffset 80
+#define RPM_SendOffset 100
+#define BatterySendOffset 120
 
 #define SlowDataUpdatePeriod 1000 // Time between CAN Messages sent
 
-// Define schedulers for messages. Define schedulers here disabled. Schedulers will be enabled
-// on OnN2kOpen so they will be synchronized with system.
-// We use own scheduler for each message so that each can have different offset and period.
-// Setup periods according PGN definition (see comments on IsDefaultSingleFrameMessage and
-// IsDefaultFastPacketMessage) and message first start offsets. Use a bit different offset for
-// each message so they will not be sent at same time.
-tN2kSyncScheduler DCBatStatusScheduler(false, 1500, 500);
-tN2kSyncScheduler DCStatusScheduler(false, 1500, 510);
-tN2kSyncScheduler BatConfScheduler(false, 5000, 520); // Non periodic
-
-// *****************************************************************************
-// Call back for NMEA2000 open. This will be called, when library starts bus communication.
-// See NMEA2000.SetOnOpen(OnN2kOpen); on setup()
-
-void OnN2kOpen()
-{
-    // Start schedulers now.
-    DCBatStatusScheduler.UpdateNextTime();
-    DCStatusScheduler.UpdateNextTime();
-    BatConfScheduler.UpdateNextTime();
-}
-
 const tNMEA2000::tProductInformation ProductInformation PROGMEM = {
-    2100,                               // N2kVersion
-    100,                                // Manufacturer's product code
-    "ESP32 C3 engine and temp monitor", // Manufacturer's Model ID
-    "1.2.0.16 (2022-10-01)",            // Manufacturer's Software version code
-    "1.2.0.0 (2022-10-01)",             // Manufacturer's Model version
-    "00000001",                         // Manufacturer's Model serial code
-    0,                                  // SertificationLevel
-    1                                   // LoadEquivalency
+    2100,                    // N2kVersion
+    100,                     // Manufacturer's product code
+    "ESP32 C3 monitor",      // Manufacturer's Model ID
+    "1.2.0.16 (2022-10-01)", // Manufacturer's Software version code
+    "1.2.0.0 (2022-10-01)",  // Manufacturer's Model version
+    "00000001",              // Manufacturer's Model serial code
+    0,                       // SertificationLevel
+    1                        // LoadEquivalency
 };
 
 const char ManufacturerInformation[] PROGMEM = "John Doe, john.doe@unknown.com";
@@ -77,9 +57,10 @@ void setupNMEA()
     for (i = 0; i < 6; i++)
         id += (chipid[i] << (7 * i));
 
-    preferences.begin("nvs", false);                         // Open nonvolatile storage (nvs)
-    NodeAddress = preferences.getInt("LastNodeAddress", 32); // Read stored last NodeAddress, default 32
-    preferences.end();
+    // preferences.begin("nvs", false);                         // Open nonvolatile storage (nvs)
+    // NodeAddress = preferences.getInt("LastNodeAddress", 32); // Read stored last NodeAddress, default 32
+    NodeAddress = 32;
+    // preferences.end();
 
     // Reserve enough buffer for sending all messages. This does not work on small memory devices like Uno or Mega
     NMEA2000.SetN2kCANMsgBufSize(8);
@@ -93,7 +74,7 @@ void setupNMEA()
     NMEA2000.SetProgmemConfigurationInformation(ManufacturerInformation, InstallationDescription1, InstallationDescription2);
 
     // Set device information
-    NMEA2000.SetDeviceInformation(id,  // Unique number. Use e.g. Serial number.
+    NMEA2000.SetDeviceInformation(123, // Unique number. Use e.g. Serial number.
                                   132, // Device function=Analog to NMEA 2000 Gateway. See codes on http://www.nmea.org/Assets/20120726%20nmea%202000%20class%20&%20function%20codes%20v%202.00.pdf
                                   25,  // Device class=Inter/Intranetwork Device. See codes on  http://www.nmea.org/Assets/20120726%20nmea%202000%20class%20&%20function%20codes%20v%202.00.pdf
                                   2046 // Just choosen free from code list on http://www.nmea.org/Assets/20121020%20nmea%202000%20registration%20list.pdf
@@ -107,9 +88,6 @@ void setupNMEA()
 
     NMEA2000.ExtendTransmitMessages(TransmitMessages);
     NMEA2000.SetMsgHandler(HandleNMEA2000Msg);
-
-    // Define OnOpen call back. This will be called, when CAN is open and system starts address claiming.
-    NMEA2000.SetOnOpen(OnN2kOpen);
 
     NMEA2000.Open();
 }
@@ -140,7 +118,7 @@ void SendN2kBattery(double BatteryVoltage)
         SetNextUpdate(SlowDataUpdated, SlowDataUpdatePeriod);
 
         Serial.printf("Voltage     : %3.0f ", BatteryVoltage);
-        Serial.println("%");
+        Serial.println("V");
 
         SetN2kDCBatStatus(N2kMsg, 0, BatteryVoltage, N2kDoubleNA, N2kDoubleNA, 1);
         NMEA2000.SendMsg(N2kMsg);
@@ -164,6 +142,23 @@ void SendN2kTankLevel(double level, double capacity)
     }
 }
 
+void SendN2kInternalTemp(double temp)
+{
+    static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, Temp2SendOffset);
+    tN2kMsg N2kMsg;
+
+    if (IsTimeToUpdate(SlowDataUpdated))
+    {
+        SetNextUpdate(SlowDataUpdated, SlowDataUpdatePeriod);
+
+        Serial.printf("Internal Temp: %3.0f °C \n", temp);
+
+        SetN2kTemperatureExt(N2kMsg, 0, 0, N2kts_InsideTemperature, CToKelvin(temp), N2kDoubleNA);
+
+        NMEA2000.SendMsg(N2kMsg);
+    }
+}
+
 void SendN2kExhaustTemp(double temp)
 {
     static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, TempSendOffset);
@@ -177,12 +172,14 @@ void SendN2kExhaustTemp(double temp)
 
         // Select the right PGN for your MFD and set the PGN value also in "TransmitMessages[]"
 
-        SetN2kEnvironmentalParameters(N2kMsg, 0, N2kts_ExhaustGasTemperature, CToKelvin(temp), // PGN130311, uncomment the PGN to be used
+        SetN2kEnvironmentalParameters(N2kMsg, 0, N2kts_EngineRoomTemperature, CToKelvin(temp), // PGN130311, uncomment the PGN to be used
                                       N2khs_Undef, N2kDoubleNA, N2kDoubleNA);
 
         // SetN2kTemperature(N2kMsg, 0, 0, N2kts_ExhaustGasTemperature, CToKelvin(temp), N2kDoubleNA);   // PGN130312, uncomment the PGN to be used
 
         // SetN2kTemperatureExt(N2kMsg, 0, 0, N2kts_ExhaustGasTemperature,CToKelvin(temp), N2kDoubleNA); // PGN130316, uncomment the PGN to be used
+
+        // SetN2kTemperatureExt(N2kMsg, 0, 0, N2kts_ExhaustGasTemperature, CToKelvin(temp), N2kDoubleNA);
 
         NMEA2000.SendMsg(N2kMsg);
     }

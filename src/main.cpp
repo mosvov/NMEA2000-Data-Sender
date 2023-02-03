@@ -1,12 +1,12 @@
 #include <Arduino.h>
 
-#define ESP32_CAN_TX_PIN GPIO_NUM_1 // Set CAN TX port
-#define ESP32_CAN_RX_PIN GPIO_NUM_2 // Set CAN RX port
+#define ESP32_CAN_TX_PIN GPIO_NUM_6 // Set CAN TX port
+#define ESP32_CAN_RX_PIN GPIO_NUM_7 // Set CAN RX port
 
-#define Eingine_RPM_Pin GPIO_NUM_3 // Engine RPM is measured as interrupt on GPIO 3
-#define ONE_WIRE_BUS GPIO_NUM_9    // Data wire for teperature (Dallas DS18B20)
-const int ADCpin2 = GPIO_NUM_3;    // Voltage measure
-const int ADCpin1 = GPIO_NUM_4;    // Tank fluid level measure
+#define Eingine_RPM_Pin GPIO_NUM_4 // Engine RPM is measured as interrupt
+#define ONE_WIRE_BUS GPIO_NUM_1    // Data wire for teperature (Dallas DS18B20)
+const int ADCpin2 = GPIO_NUM_2;    // Voltage measure
+const int ADCpin1 = GPIO_NUM_3;    // Tank fluid level measure
 
 #include <nmea.h>
 #include <DallasTemperature.h>
@@ -63,7 +63,7 @@ void initTempSensor()
   } while (0)
 
 #define ADC_Calibration_Value1 250.0 // For resistor measure 5 Volt and 180 Ohm equals 100% plus 1K resistor.
-#define ADC_Calibration_Value2 34.3  // The real value depends on the true resistor values for the ADC input (100K / 27 K).
+#define ADC_Calibration_Value2 18.0  // The real value depends on the true resistor values for the ADC input (100K / 27 K).
 
 // RPM data. Generator RPM is measured on connector "W"
 #define RPM_Calibration_Value 1.0 // Translates Generator RPM to Engine RPM
@@ -120,12 +120,12 @@ void GetTemperature(void *parameter)
     // Get internal temp
     ESP_ERROR_CHECK(temp_sensor_read_celsius(&InternalTemp));
 
-    debug_log("FuelLevel=" + String(FuelLevel));
-    debug_log("EngineRPM=" + String(EngineRPM));
-    debug_log("BatteryVolt=V" + String(BatteryVolt));
-    debug_log("InternalTemp=C" + String(InternalTemp));
-    debug_log("ExhaustTemp=C" + String(ExhaustTemp));
-    debug_log("__________________________________");
+    // debug_log("FuelLevel=" + String(FuelLevel));
+    // debug_log("EngineRPM=" + String(EngineRPM));
+    // debug_log("BatteryVolt=V" + String(BatteryVolt));
+    // debug_log("InternalTemp=C" + String(InternalTemp));
+    // debug_log("ExhaustTemp=C" + String(ExhaustTemp));
+    // debug_log("__________________________________");
   }
 }
 
@@ -187,15 +187,6 @@ void setup()
   // Start OneWire
   sensors.begin();
 
-  // Grab a count of devices on the wire
-  int numberOfDevices = sensors.getDeviceCount();
-
-  // locate devices on the bus
-  Serial.print("Locating devices...");
-  Serial.print("Found ");
-  Serial.print(numberOfDevices, DEC);
-  Serial.println(" devices.");
-
   // Create task for core 0, loop() runs on core 1
   xTaskCreatePinnedToCore(
       GetTemperature, /* Function to implement the task */
@@ -235,12 +226,14 @@ void loop()
 
   EngineRPM = ((EngineRPM * 5) + ReadRPM() * RPM_Calibration_Value) / 6; // This implements a low pass filter to eliminate spike for RPM measurements
 
-  // if (FuelLevel > 100) FuelLevel = 100;
+  if (FuelLevel > 100)
+    FuelLevel = 100;
 
-  // SendN2kTankLevel(FuelLevel, 200); // Adjust max tank capacity.  Is it 200 ???
-  // SendN2kExhaustTemp(ExhaustTemp);
-  // SendN2kEngineRPM(EngineRPM);
-  // SendN2kBattery(BatteryVolt);
+  SendN2kTankLevel(FuelLevel, 200); // Adjust max tank capacity.  Is it 200 ???
+  SendN2kExhaustTemp(ExhaustTemp);
+  SendN2kInternalTemp(InternalTemp);
+  SendN2kEngineRPM(EngineRPM);
+  SendN2kBattery(BatteryVolt);
 
   loopNMEA();
 

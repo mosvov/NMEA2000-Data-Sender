@@ -1,14 +1,8 @@
-#define ESP32_CAN_TX_PIN GPIO_NUM_1 // Set CAN TX port
-#define ESP32_CAN_RX_PIN GPIO_NUM_2 // Set CAN RX port
+#define ESP32_CAN_TX_PIN GPIO_NUM_6 // Set CAN TX port
+#define ESP32_CAN_RX_PIN GPIO_NUM_7 // Set CAN RX port
 
-#include "driver/periph_ctrl.h"
-#include "driver/gpio.h"
 #include "driver/twai.h"
 #include "NMEA2000_esp32.h"
-
-#if !defined(round)
-#include <math.h>
-#endif
 
 bool tNMEA2000_esp32::CanInUse = false;
 tNMEA2000_esp32 *pNMEA2000_esp32 = 0;
