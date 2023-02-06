@@ -10,10 +10,9 @@ Preferences preferences; // Nonvolatile storage on ESP32 - To store LastDeviceAd
 int NodeAddress;         // To store last Node Address
 // Set the information for other bus devices, which messages we support
 const unsigned long TransmitMessages[] PROGMEM = {127505L, // Fluid Level
-                                                  130311L,
-                                                  130316L, // Temperature  (or alternatively 130312L or 130316L)
+                                                  130312L, // Temperature
                                                   127488L, // Engine Rapid / RPM
-                                                  127508L, // Battery Status
+                                                  // 127508L, // Battery Status
                                                   0};
 
 // Send time offsets
@@ -24,6 +23,7 @@ const unsigned long TransmitMessages[] PROGMEM = {127505L, // Fluid Level
 #define BatterySendOffset 120
 
 #define SlowDataUpdatePeriod 1000 // Time between CAN Messages sent
+#define FastDataUpdatePeriod 400
 
 const tNMEA2000::tProductInformation ProductInformation PROGMEM = {
     2100,                    // N2kVersion
@@ -53,14 +53,9 @@ void setupNMEA()
     uint32_t id = 0;
     int i = 0;
 
-    esp_efuse_mac_get_default(chipid);
-    for (i = 0; i < 6; i++)
-        id += (chipid[i] << (7 * i));
-
-    // preferences.begin("nvs", false);                         // Open nonvolatile storage (nvs)
-    // NodeAddress = preferences.getInt("LastNodeAddress", 32); // Read stored last NodeAddress, default 32
-    NodeAddress = 32;
-    // preferences.end();
+    preferences.begin("nvs", false);                         // Open nonvolatile storage (nvs)
+    NodeAddress = preferences.getInt("LastNodeAddress", 32); // Read stored last NodeAddress, default 32
+    preferences.end();
 
     // Reserve enough buffer for sending all messages. This does not work on small memory devices like Uno or Mega
     NMEA2000.SetN2kCANMsgBufSize(8);
@@ -80,14 +75,14 @@ void setupNMEA()
                                   2046 // Just choosen free from code list on http://www.nmea.org/Assets/20121020%20nmea%202000%20registration%20list.pdf
     );
 
-    NMEA2000.SetForwardStream(&Serial);
-    NMEA2000.SetForwardType(tNMEA2000::fwdt_Text); // Show in clear text. Leave uncommented for default Actisense format.
+    // NMEA2000.SetForwardStream(&Serial);
+    // NMEA2000.SetForwardType(tNMEA2000::fwdt_Text); // Show in clear text. Leave uncommented for default Actisense format.
 
     NMEA2000.SetMode(tNMEA2000::N2km_ListenAndNode, NodeAddress);
     // NMEA2000.SetDebugMode(tNMEA2000::dm_ClearText); // Uncomment this, so you can test code without CAN bus chips on Arduino Mega
 
     NMEA2000.ExtendTransmitMessages(TransmitMessages);
-    NMEA2000.SetMsgHandler(HandleNMEA2000Msg);
+    // NMEA2000.SetMsgHandler(HandleNMEA2000Msg);
 
     NMEA2000.Open();
 }
@@ -110,15 +105,15 @@ void SetNextUpdate(unsigned long &NextUpdate, unsigned long Period)
 
 void SendN2kBattery(double BatteryVoltage)
 {
-    static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, BatterySendOffset);
+    static unsigned long FastDataUpdated = InitNextUpdate(FastDataUpdatePeriod, BatterySendOffset);
     tN2kMsg N2kMsg;
 
-    if (IsTimeToUpdate(SlowDataUpdated))
+    if (IsTimeToUpdate(FastDataUpdated))
     {
-        SetNextUpdate(SlowDataUpdated, SlowDataUpdatePeriod);
+        SetNextUpdate(FastDataUpdated, FastDataUpdatePeriod);
 
-        Serial.printf("Voltage     : %3.0f ", BatteryVoltage);
-        Serial.println("V");
+        // Serial.printf("Voltage     : %3.0f ", BatteryVoltage);
+        // Serial.println("V");
 
         SetN2kDCBatStatus(N2kMsg, 0, BatteryVoltage, N2kDoubleNA, N2kDoubleNA, 1);
         NMEA2000.SendMsg(N2kMsg);
@@ -127,15 +122,15 @@ void SendN2kBattery(double BatteryVoltage)
 
 void SendN2kTankLevel(double level, double capacity)
 {
-    static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, TankSendOffset);
+    static unsigned long FastDataUpdated = InitNextUpdate(FastDataUpdatePeriod, TankSendOffset);
     tN2kMsg N2kMsg;
 
-    if (IsTimeToUpdate(SlowDataUpdated))
+    if (IsTimeToUpdate(FastDataUpdated))
     {
-        SetNextUpdate(SlowDataUpdated, SlowDataUpdatePeriod);
+        SetNextUpdate(FastDataUpdated, FastDataUpdatePeriod);
 
-        Serial.printf("Fuel Level  : %3.0f ", level);
-        Serial.println("%");
+        // Serial.printf("Fuel Level  : %3.0f ", level);
+        // Serial.println("%");
 
         SetN2kFluidLevel(N2kMsg, 0, N2kft_Fuel, level, capacity);
         NMEA2000.SendMsg(N2kMsg);
@@ -151,9 +146,9 @@ void SendN2kInternalTemp(double temp)
     {
         SetNextUpdate(SlowDataUpdated, SlowDataUpdatePeriod);
 
-        Serial.printf("Internal Temp: %3.0f °C \n", temp);
+        // Serial.printf("Internal Temp: %3.0f °C \n", temp);
 
-        SetN2kTemperatureExt(N2kMsg, 0, 0, N2kts_InsideTemperature, CToKelvin(temp), N2kDoubleNA);
+        SetN2kTemperature(N2kMsg, 0, 0, N2kts_HeatIndexTemperature, CToKelvin(temp), N2kDoubleNA);
 
         NMEA2000.SendMsg(N2kMsg);
     }
@@ -168,19 +163,9 @@ void SendN2kExhaustTemp(double temp)
     {
         SetNextUpdate(SlowDataUpdated, SlowDataUpdatePeriod);
 
-        Serial.printf("Exhaust Temp: %3.0f °C \n", temp);
+        // Serial.printf("Exhaust Temp: %3.0f °C \n", temp);
 
-        // Select the right PGN for your MFD and set the PGN value also in "TransmitMessages[]"
-
-        SetN2kEnvironmentalParameters(N2kMsg, 0, N2kts_EngineRoomTemperature, CToKelvin(temp), // PGN130311, uncomment the PGN to be used
-                                      N2khs_Undef, N2kDoubleNA, N2kDoubleNA);
-
-        // SetN2kTemperature(N2kMsg, 0, 0, N2kts_ExhaustGasTemperature, CToKelvin(temp), N2kDoubleNA);   // PGN130312, uncomment the PGN to be used
-
-        // SetN2kTemperatureExt(N2kMsg, 0, 0, N2kts_ExhaustGasTemperature,CToKelvin(temp), N2kDoubleNA); // PGN130316, uncomment the PGN to be used
-
-        // SetN2kTemperatureExt(N2kMsg, 0, 0, N2kts_ExhaustGasTemperature, CToKelvin(temp), N2kDoubleNA);
-
+        SetN2kTemperature(N2kMsg, 0, 0, N2kts_EngineRoomTemperature, CToKelvin(temp), N2kDoubleNA);
         NMEA2000.SendMsg(N2kMsg);
     }
 }
@@ -194,7 +179,7 @@ void SendN2kEngineRPM(double RPM)
     {
         SetNextUpdate(SlowDataUpdated, SlowDataUpdatePeriod);
 
-        Serial.printf("Engine RPM  :%4.0f RPM \n", RPM);
+        // Serial.printf("Engine RPM  :%4.0f RPM \n", RPM);
 
         SetN2kEngineParamRapid(N2kMsg, 0, RPM, N2kDoubleNA, N2kInt8NA);
 
@@ -334,9 +319,12 @@ void checkNmeaErrors(void *parameter)
     }
 }
 
-void reciveNmeaMessage(void *parameter)
+void receiveNmeaMessage(void *parameter)
 {
-    ESP32_CAN_read_frame();
+    while (true)
+    {
+        ESP32_CAN_read_frame();
+    }
 }
 
 void loopNMEA()

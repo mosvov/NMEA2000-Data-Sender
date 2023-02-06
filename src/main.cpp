@@ -63,7 +63,7 @@ void initTempSensor()
   } while (0)
 
 #define ADC_Calibration_Value1 250.0 // For resistor measure 5 Volt and 180 Ohm equals 100% plus 1K resistor.
-#define ADC_Calibration_Value2 18.0  // The real value depends on the true resistor values for the ADC input (100K / 27 K).
+#define ADC_Calibration_Value2 17.0  // The real value depends on the true resistor values for the ADC input (100K / 27 K).
 
 // RPM data. Generator RPM is measured on connector "W"
 #define RPM_Calibration_Value 1.0 // Translates Generator RPM to Engine RPM
@@ -207,35 +207,35 @@ void setup()
       0);              /* Core where the task should run */
 
   xTaskCreatePinnedToCore(
-      reciveNmeaMessage, /* Function to implement the task */
-      "Task3",           /* Name of the task */
-      4096,              /* Stack size in words */
-      NULL,              /* Task input parameter */
-      10,                /* Priority of the task */
-      NULL,              /* Task handle. */
-      0);                /* Core where the task should run */
+      receiveNmeaMessage,    /* Function to implement the task */
+      "Task3",               /* Name of the task */
+      4096,                  /* Stack size in words */
+      NULL,                  /* Task input parameter */
+      2 | portPRIVILEGE_BIT, /* Priority of the task */
+      NULL,                  /* Task handle. */
+      0);                    /* Core where the task should run */
 
   delay(200);
 }
 
 void loop()
 {
-  BatteryVolt = ((BatteryVolt * 15) + (ReadVoltage(ADCpin2) * ADC_Calibration_Value2 / 4096)) / 16; // This implements a low pass filter to eliminate spike for ADC readings
 
-  FuelLevel = ((FuelLevel * 15) + (ReadVoltage(ADCpin1) * ADC_Calibration_Value1 / 4096)) / 16; // This implements a low pass filter to eliminate spike for ADC readings
+  loopNMEA();
 
-  EngineRPM = ((EngineRPM * 5) + ReadRPM() * RPM_Calibration_Value) / 6; // This implements a low pass filter to eliminate spike for RPM measurements
+  // BatteryVolt = ((BatteryVolt * 15) + (ReadVoltage(ADCpin2) * ADC_Calibration_Value2 / 4096)) / 16; // This implements a low pass filter to eliminate spike for ADC readings
 
-  if (FuelLevel > 100)
-    FuelLevel = 100;
+  FuelLevel = 20; //((FuelLevel * 15) + (ReadVoltage(ADCpin1) * ADC_Calibration_Value1 / 4096)) / 16; // This implements a low pass filter to eliminate spike for ADC readings
 
-  SendN2kTankLevel(FuelLevel, 200); // Adjust max tank capacity.  Is it 200 ???
+  EngineRPM = 3000; //((EngineRPM * 5) + ReadRPM() * RPM_Calibration_Value) / 6; // This implements a low pass filter to eliminate spike for RPM measurements
+
+  // if (FuelLevel > 100) FuelLevel = 100;
+
+  // SendN2kBattery(BatteryVolt);
+  SendN2kTankLevel(FuelLevel, 35); // Adjust max tank capacity.  Is it 200 ???
   SendN2kExhaustTemp(ExhaustTemp);
   SendN2kInternalTemp(InternalTemp);
   SendN2kEngineRPM(EngineRPM);
-  SendN2kBattery(BatteryVolt);
-
-  loopNMEA();
 
   // Dummy to empty input buffer to avoid board to stuck with e.g. NMEA Reader
   if (ble.available())

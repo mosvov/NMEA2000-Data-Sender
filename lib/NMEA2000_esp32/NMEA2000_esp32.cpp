@@ -1,5 +1,6 @@
 #define ESP32_CAN_TX_PIN GPIO_NUM_6 // Set CAN TX port
 #define ESP32_CAN_RX_PIN GPIO_NUM_7 // Set CAN RX port
+// #define NMEA2000_MSG_DEBUG true;
 
 #include "driver/twai.h"
 #include "NMEA2000_esp32.h"
@@ -18,12 +19,20 @@ tNMEA2000_esp32::tNMEA2000_esp32(gpio_num_t _TxPin, gpio_num_t _RxPin) : tNMEA20
 
 bool tNMEA2000_esp32::CANSendFrame(unsigned long id, unsigned char len, const unsigned char *buf, bool /*wait_sent*/)
 {
-
   twai_message_t message;
 
   message.identifier = id;
   message.data_length_code = len > 8 ? 8 : len;
-  memcpy(message.data, buf, len);
+  message.extd = 1;
+  message.ss = 0;
+
+  uint8_t frame_buf[8];
+  memcpy(frame_buf, buf, len);
+
+  for (size_t i = 0; i < len; i++)
+  {
+    message.data[i] = frame_buf[i];
+  }
 
   esp_err_t result = twai_transmit(&message, pdMS_TO_TICKS(1000));
   // Queue message for transmission
@@ -92,20 +101,17 @@ bool tNMEA2000_esp32::CANGetFrame(unsigned long &id, unsigned char &len, unsigne
 
 void tNMEA2000_esp32::CAN_read_frame()
 {
-  while (true)
+  // Wait for message to be received
+  twai_message_t message;
+  esp_err_t result = twai_receive(&message, portMAX_DELAY);
+  if (result == ESP_OK)
   {
-    // Wait for message to be received
-    twai_message_t message;
-    esp_err_t result = twai_receive(&message, portMAX_DELAY);
-    if (result == ESP_OK)
-    {
-      // send frame to input queue
-      xQueueSendToBackFromISR(RxQueue, &message, 0);
-    }
-    else
-    {
-      Serial.printf("Failed to receive message - %s \n", esp_err_to_name(result));
-    }
+    // send frame to input queue
+    xQueueSendToBackFromISR(RxQueue, &message, 0);
+  }
+  else
+  {
+    Serial.printf("Failed to receive message - %s \n", esp_err_to_name(result));
   }
 }
 
@@ -114,7 +120,6 @@ void tNMEA2000_esp32::CAN_init()
 {
   twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(ESP32_CAN_TX_PIN, ESP32_CAN_RX_PIN, TWAI_MODE_NO_ACK);
   g_config.tx_queue_len = 20;
-
   twai_timing_config_t t_config = TWAI_TIMING_CONFIG_250KBITS();
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
