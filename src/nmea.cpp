@@ -315,6 +315,8 @@ void checkNmeaErrors(void *parameter)
             {
                 Serial.println("Alert: The TWAI controller was reset");
             }
+
+            vTaskDelay(10);
         }
     }
 }
