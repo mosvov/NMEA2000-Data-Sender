@@ -28,7 +28,7 @@ const unsigned long TransmitMessages[] PROGMEM = {127505L, // Fluid Level
 const tNMEA2000::tProductInformation ProductInformation PROGMEM = {
     2100,                    // N2kVersion
     100,                     // Manufacturer's product code
-    "ESP32 C3 monitor",      // Manufacturer's Model ID
+    "ESP32 monitor",         // Manufacturer's Model ID
     "1.2.0.16 (2022-10-01)", // Manufacturer's Software version code
     "1.2.0.0 (2022-10-01)",  // Manufacturer's Model version
     "00000001",              // Manufacturer's Model serial code
@@ -75,14 +75,14 @@ void setupNMEA()
                                   2046 // Just choosen free from code list on http://www.nmea.org/Assets/20121020%20nmea%202000%20registration%20list.pdf
     );
 
-    // NMEA2000.SetForwardStream(&Serial);
-    // NMEA2000.SetForwardType(tNMEA2000::fwdt_Text); // Show in clear text. Leave uncommented for default Actisense format.
+    NMEA2000.SetForwardStream(&Serial);
+    NMEA2000.SetForwardType(tNMEA2000::fwdt_Text); // Show in clear text. Leave uncommented for default Actisense format.
 
     NMEA2000.SetMode(tNMEA2000::N2km_ListenAndNode, NodeAddress);
     // NMEA2000.SetDebugMode(tNMEA2000::dm_ClearText); // Uncomment this, so you can test code without CAN bus chips on Arduino Mega
 
     NMEA2000.ExtendTransmitMessages(TransmitMessages);
-    // NMEA2000.SetMsgHandler(HandleNMEA2000Msg);
+    NMEA2000.SetMsgHandler(HandleNMEA2000Msg);
 
     NMEA2000.Open();
 }
@@ -325,7 +325,7 @@ void receiveNmeaMessage(void *parameter)
 {
     while (true)
     {
-        ESP32_CAN_read_frame();
+        // ESP32_CAN_read_frame();
     }
 }
 
