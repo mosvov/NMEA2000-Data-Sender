@@ -3,6 +3,8 @@
 #define ESP32_CAN_RX_PIN GPIO_NUM_4 // Set CAN RX port
 
 #include <nmea.h>
+#include <sensors.h>
+
 #include <math.h>
 #include <Wire.h>
 
@@ -23,41 +25,14 @@
 
 using namespace sensesp;
 
-#define SENSE_ALT_PIN GPIO_NUM_33         // Engine RPM is measured as interrupt
-#define SENSE_DS18B20_PIN = GPIO_NUM_25;  // Data wire for teperature (Dallas DS18B20)
-#define SENSE_FUEL_T_PIN = GPIO_NUM_34;   // Tank fluid level measure
-#define SENSE_COOLANT_PIN = GPIO_NUM_32;  // Coolant temperature sender
-#define SENSE_V_ANALOG_PIN = GPIO_NUM_35; // Analog voltage
-#define BUZZER_PIN = GPIO_NUM_15;         // BUZZER
+#define SENSE_ALT_PIN GPIO_NUM_33      // Engine RPM is measured as interrupt
+#define SENSE_DS18B20_PIN GPIO_NUM_25  // Data wire for teperature (Dallas DS18B20)
+#define SENSE_FUEL_T_PIN GPIO_NUM_34   // Tank fluid level measure
+#define SENSE_COOLANT_PIN GPIO_NUM_32  // Coolant temperature sender
+#define SENSE_V_ANALOG_PIN GPIO_NUM_35 // Analog voltage
+#define BUZZER_PIN GPIO_NUM_15         // BUZZER
 
 const unsigned int read_delay = 500;
-
-const float kDefaultFrequencyScale = 1. / 97;
-
-FloatProducer *ConnectTachoSender(int pin, String name)
-{
-    char config_path[80];
-    char sk_path[80];
-
-    snprintf(config_path, sizeof(config_path), "", name.c_str());
-    auto tacho_input = new DigitalInputCounter(pin, INPUT, RISING, 500, config_path);
-
-    snprintf(config_path, sizeof(config_path), "/Tacho %s/Revolution Multiplier", name.c_str());
-    auto tacho_frequency = new Frequency(kDefaultFrequencyScale, config_path);
-
-    snprintf(config_path, sizeof(config_path), "/Tacho %s/Revolutions SK Path", name.c_str());
-    snprintf(sk_path, sizeof(sk_path), "propulsion.%s.revolutions", name.c_str());
-    auto tacho_frequency_sk_output = new SKOutputFloat(sk_path, config_path);
-
-    tacho_input
-        ->connect_to(tacho_frequency)
-        ->connect_to(tacho_frequency_sk_output);
-
-    tacho_input->attach([name, tacho_input]()
-                        { debugD("Input %s counter: %d", name.c_str(), tacho_input->get()); });
-
-    return tacho_frequency;
-}
 
 // I2C pins on SH-ESP32
 const int kSDAPin = 21;
@@ -131,18 +106,29 @@ void setup()
 
     ScanI2C(i2c);
 
+    pinMode(BUZZER_PIN, OUTPUT);
+    // app.onRepeat(500, tone(BUZZER, 85));
+
     // DallasTemperatureSensors *dts = new DallasTemperatureSensors(ONEWIRE_PIN);
 
     // Connect the tank senders
-    // auto tank_a_volume = ConnectTankSender(ads1115, 0, "A");
+    auto tank_a_volume = ConnectTankSender(SENSE_FUEL_T_PIN, "Fuel");
 
     // Connect the tacho senders
-    // auto tacho_1_frequency = ConnectTachoSender(Eingine_RPM_Pin, "1");
+    auto tacho_1_frequency = ConnectTachoSender(SENSE_ALT_PIN, "1");
 
     // define three 1-Wire temperature sensors that update every 1000 ms
     // and have specific web UI configuration paths
     // auto main_engine_oil_temperature =
     //    new OneWireTemperature(dts, 1000, "/mainEngineOilTemp/oneWire");
+
+    tank_a_volume->connect_to(
+        new LambdaConsumer<float>([](float value)
+                                  { debugD("tank_a_volume %d ", value); }));
+
+    tacho_1_frequency->connect_to(
+        new LambdaConsumer<float>([](float value)
+                                  { debugD("tacho_1_frequency %d ", value); }));
 
     // main_engine_oil_temperature->connect_to(
     //     new LambdaConsumer<float>([](float temperature)
