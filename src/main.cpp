@@ -20,8 +20,11 @@
 #include "sensesp/sensors/digital_input.h"
 #include "sensesp/signalk/signalk_output.h"
 #include "sensesp/transforms/frequency.h"
-#include "sensesp_onewire/onewire_temperature.h"
+// #include "sensesp_onewire/onewire_temperature.h"
 #include "sensesp_minimal_app_builder.h"
+
+#include <Adafruit_BME280.h>
+Adafruit_BME280 bme; // I2C
 
 using namespace sensesp;
 
@@ -41,37 +44,30 @@ const int kSCLPin = 22;
 TwoWire *i2c;
 #define WIRE Wire
 
-// Convenience function to print the addresses found on the I2C bus
-void ScanI2C(TwoWire *i2c)
-{
-    uint8_t error, address;
-
-    Serial.println("Scanning...");
-
-    for (address = 1; address < 127; address++)
-    {
-        i2c->beginTransmission(address);
-        error = i2c->endTransmission();
-
-        if (error == 0)
-        {
-            Serial.print("I2C device found at address 0x");
-            if (address < 16)
-                Serial.print("0");
-            Serial.print(address, HEX);
-            Serial.println("");
-        }
-        else if (error == 4)
-        {
-            Serial.print("Unknown error at address 0x");
-            if (address < 16)
-                Serial.print("0");
-            Serial.println(address, HEX);
-        }
-    }
-}
-
 ReactESP app;
+
+#define SEALEVELPRESSURE_HPA (1019.8)
+
+void printValues()
+{
+    Serial.print("Temperature = ");
+    Serial.print(bme.readTemperature());
+    Serial.println(" *C");
+
+    Serial.print("Pressure = ");
+    Serial.print(bme.readPressure() / 100.0F);
+    Serial.println(" hPa");
+
+    Serial.print("Approx. Altitude = ");
+    Serial.print(bme.readAltitude(SEALEVELPRESSURE_HPA));
+    Serial.println(" m");
+
+    Serial.print("Humidity = ");
+    Serial.print(bme.readHumidity());
+    Serial.println(" %");
+
+    Serial.println();
+}
 
 void setup()
 {
@@ -104,10 +100,14 @@ void setup()
     i2c = new TwoWire(0);
     i2c->begin(kSDAPin, kSCLPin);
 
-    ScanI2C(i2c);
+    // Init BME280
+    if (!bme.begin(0x76, i2c))
+    {
+        Serial.println(F("Could not find a valid BME280 sensor, check wiring!"));
+    }
 
     pinMode(BUZZER_PIN, OUTPUT);
-    // app.onRepeat(500, tone(BUZZER, 85));
+    // digitalWrite(BUZZER_PIN, HIGH);
 
     // DallasTemperatureSensors *dts = new DallasTemperatureSensors(ONEWIRE_PIN);
 
@@ -168,9 +168,21 @@ void setup()
     //    Serial.printf("Counter 2: %d\n", input);
     //    return input; }));
 
+    // No need to parse the messages at every single loop iteration; 1 ms will do
+    app.onRepeat(1, []()
+                 {
+                     // nmea2000->ParseMessages();
+                 });
+
+    // enable CAN status polling
+    app.onRepeat(500, []()
+                 {
+                     printValues();
+                     // PollCANStatus();
+                 });
+
     sensesp_app->start();
 }
-
 // The loop function is called in an endless loop during program execution.
 // It simply calls `app.tick()` which will then execute all reactions as needed.
 void loop()
